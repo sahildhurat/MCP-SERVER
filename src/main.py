@@ -69,23 +69,24 @@ def parse_args():
 
 
 def main():
-    args = parse_args()
-    log.info("=" * 60)
-    log.info("  Weekly Pulse Pipeline")
-    log.info("  Play Store: %s | App Store: %s", args.play_store_id, args.app_store_id)
-    log.info("  Reviews per store: %d", args.count)
-    log.info("=" * 60)
-
     # ── Load config ────────────────────────────────────────────
     try:
         from src.config import config
-        log.info("Configuration loaded successfully.")
     except SystemExit:
         log.error("Missing environment variables. Check your .env file.")
         return
     except Exception as e:
         log.error("Failed to load config: %s", e)
         return
+
+    args = parse_args()
+    log.info("=" * 60)
+    log.info("  Weekly Pulse Pipeline")
+    log.info("  Play Store: %s | App Store: %s", args.play_store_id, args.app_store_id)
+    log.info("  Reviews per store: %d", args.count)
+    log.info("=" * 60)
+    
+    log.info("Configuration loaded successfully.")
 
     # ── Phase 1: Ingest Reviews ────────────────────────────────
     log.info("-" * 40)
@@ -129,15 +130,15 @@ def main():
         log.debug(traceback.format_exc())
         return
 
-    # ── Phase 2: LLM Analysis (Gemini) ─────────────────────────
+    # ── Phase 2: LLM Analysis (Groq) ─────────────────────────
     log.info("-" * 40)
-    log.info("PHASE 2: Generating pulse analysis via Gemini...")
+    log.info("PHASE 2: Generating pulse analysis via Groq...")
 
     try:
-        from src.processing.llm_client import LLMClient
+        from src.drafting.groq_client import GroqClient
         from src.processing.pulse_generator import PulseGenerator
 
-        llm = LLMClient(api_key=config["LLM_API_KEY"])
+        llm = GroqClient(api_key=config["GROQ_API_KEY"])
         generator = PulseGenerator(llm_client=llm)
         pulse_report = generator.generate_pulse(all_reviews)
 
@@ -162,13 +163,10 @@ def main():
 
         groq = GroqClient(api_key=config["GROQ_API_KEY"])
         drafter = ReportDrafter(groq_client=groq)
-        draft_text = drafter.draft_report(pulse_report)
+        drafts = drafter.draft_report(pulse_report)
 
-        word_count = len(draft_text.split())
-        log.info("  Draft complete (%d words).", word_count)
-
-        if word_count > 300:
-            log.warning("  Draft exceeds 250-word target (%d words).", word_count)
+        log.info("  Draft complete (Doc: %d words, Email: %d words).", 
+                 len(drafts.doc_content.split()), len(drafts.email_body.split()))
 
     except Exception as e:
         log.error("PHASE 3 FAILED: %s", e)
@@ -183,10 +181,8 @@ def main():
     try:
         from src.integration.docs_mcp import DocsPublisher
 
-        # For the doc, we use the draft without the {doc_url} placeholder
-        doc_content = draft_text.replace("{doc_url}", "[link will be added]")
         publisher = DocsPublisher(server_url=config["MCP_DOCS_SERVER_URL"])
-        doc_url = publisher.publish_pulse(doc_content)
+        doc_url = publisher.publish_pulse(drafts.doc_content)
 
         log.info("  Google Doc published: %s", doc_url)
 
@@ -195,27 +191,27 @@ def main():
         log.debug(traceback.format_exc())
         log.warning("  Continuing without Doc URL — email will not contain a link.")
 
-    # ── Phase 5: Draft Email via Gmail MCP ─────────────────────
+    # ── Phase 5: Send Email via Gmail MCP ─────────────────────
     log.info("-" * 40)
-    log.info("PHASE 5: Creating Gmail draft via MCP...")
+    log.info("PHASE 5: Sending email via MCP...")
 
     try:
         from src.integration.gmail_mcp import GmailNotifier
 
         # Replace the {doc_url} placeholder with the actual doc URL
-        email_body = draft_text.replace("{doc_url}", doc_url or "[Doc creation failed]")
+        email_body = drafts.email_body.replace("{doc_url}", doc_url or "[Doc creation failed]")
 
         subject = f"Weekly App Review Pulse - {datetime.now().strftime('%B %d, %Y')}"
         recipient = config["RECIPIENT_EMAIL"]
 
         notifier = GmailNotifier(server_url=config["MCP_GMAIL_SERVER_URL"])
-        draft_id = notifier.draft_email(
+        confirmation = notifier.send_email(
             recipient=recipient,
             subject=subject,
             email_body=email_body,
         )
 
-        log.info("  Gmail draft created! Draft ID: %s", draft_id)
+        log.info("  Gmail sent! %s", confirmation)
         log.info("  Recipient: %s", recipient)
 
     except Exception as e:
