@@ -11,6 +11,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ src/
 COPY .env.example .env.example
 
-# Default command runs the FastAPI server
-# Railway injects the PORT env var automatically
-CMD uvicorn src.api:app --host 0.0.0.0 --port ${PORT:-8000}
+# Expose port 8000 so Railway auto-detects it
+EXPOSE 8000
+
+# Default command runs the FastAPI server on port 8000
+CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]
