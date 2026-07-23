@@ -23,6 +23,7 @@ class GroqClient:
                     ],
                     model=self.model,
                     temperature=0.3, # Low temperature for professional consistency
+                    response_format={"type": "json_object"} if "valid JSON format" in prompt else None
                 )
                 return chat_completion.choices[0].message.content
                 
