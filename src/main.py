@@ -188,6 +188,7 @@ def run_pipeline(play_store_id: str, app_store_id: str, count: int) -> dict:
     except Exception as e:
         log.error("PHASE 5 FAILED: %s", e)
         log.debug(traceback.format_exc())
+        confirmation = f"Error sending email: {str(e)}"
 
     # ── Summary ────────────────────────────────────────────────
     log.info("=" * 60)
