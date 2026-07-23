@@ -1,5 +1,6 @@
 import os
 import requests
+import json
 from mcp.server.fastmcp import FastMCP
 from dotenv import load_dotenv
 
@@ -18,7 +19,7 @@ port = int(os.environ.get("PORT", 8001))
 mcp = FastMCP("ReviewFetcher", port=port, host="0.0.0.0")
 
 @mcp.tool()
-def fetch_play_store_reviews(app_id: str, count: int = 100) -> list[dict]:
+def fetch_play_store_reviews(app_id: str, count: int = 100) -> str:
     """Fetch raw reviews from Google Play Store using SerpApi.
     
     Args:
@@ -44,10 +45,10 @@ def fetch_play_store_reviews(app_id: str, count: int = 100) -> list[dict]:
             "score": r.get("rating", 0),
             "at": r.get("date", "")
         })
-    return formatted
+    return json.dumps(formatted)
 
 @mcp.tool()
-def fetch_app_store_reviews(app_id: str, count: int = 100) -> list[dict]:
+def fetch_app_store_reviews(app_id: str, count: int = 100) -> str:
     """Fetch raw reviews from Apple App Store using SerpApi.
     
     Args:
@@ -73,7 +74,7 @@ def fetch_app_store_reviews(app_id: str, count: int = 100) -> list[dict]:
             "rating": r.get("rating", 0),
             "date": r.get("date", "")
         })
-    return formatted
+    return json.dumps(formatted)
 
 @mcp.tool()
 def send_email(
